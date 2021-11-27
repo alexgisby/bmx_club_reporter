@@ -1,0 +1,25 @@
+{
+  "name": "bmx_club_reporter",
+  "description": "Quick and dirty tool to make generating TidyHQ + Sqorz EOY registrar reports easier.",
+  "author": {
+    "name": "Alex Gisby <alex@solution10.com>"
+  },
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "generate": "ts-node ./src/main.ts"
+  },
+  "dependencies": {
+    "axios": "^0.24.0",
+    "csv-parse": "^5.0.3",
+    "csv-stringify": "^6.0.4",
+    "rimraf": "^3.0.2",
+    "ts-node": "^10.4.0",
+    "typescript": "^4.5.2"
+  },
+  "devDependencies": {
+    "@types/node": "^16.11.10",
+    "@types/rimraf": "^3.0.2"
+  }
+}
