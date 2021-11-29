@@ -35,6 +35,8 @@ interface Membership {
 export interface Contact {
     name: string,
     memberNo: string,
+    active: boolean;
+    dateOfBirth: string | null;
     race: string | boolean,
     volunteer: string | boolean,
     firstAid?: {
@@ -76,6 +78,8 @@ export function parseCsv(filename: string): Promise<ContactMap> {
             const contact: Contact = map.has(memberNo) ? map.get(memberNo)! : {
                 name,
                 memberNo,
+                dateOfBirth: dob,
+                active: false,
                 race: false,
                 volunteer: false,
                 memberLevels: [],
@@ -90,32 +94,36 @@ export function parseCsv(filename: string): Promise<ContactMap> {
                     contact.volunteer = memberLevel;
                 }
 
-                // First aid:
-                if (firstAidExpiry !== "") {
-                    contact.firstAid = {
-                        expires: firstAidExpiry,
-                        expired: isExpired(firstAidExpiry)
-                    }
-                }
+                contact.active = true;
+            }
 
-                // Coaching:
-                if (coachingLevel !== "") {
-                    contact.coach = {
-                        type: coachingLevel,
-                        expiry: coachingExpiry,
-                        expired: isExpired(coachingExpiry)
-                    }
-                }
-
-                // Official:
-                if (officialLevel !== "") {
-                    contact.official = {
-                        type: officialLevel,
-                        expiry: officialExpiry,
-                        expired: isExpired(officialExpiry)
-                    };
+            // First aid:
+            if (firstAidExpiry !== "" && (!contact.firstAid || contact.firstAid?.expired)) {
+                contact.firstAid = {
+                    expires: firstAidExpiry,
+                    expired: isExpired(firstAidExpiry)
                 }
             }
+
+            // Coaching:
+            if (coachingLevel !== "" && (!contact.coach || contact.coach?.expired)) {
+                contact.coach = {
+                    type: coachingLevel,
+                    expiry: coachingExpiry,
+                    expired: isExpired(coachingExpiry)
+                }
+            }
+
+            // Official:
+            if (officialLevel !== "" && (!contact.official || contact.official?.expired)) {
+                contact.official = {
+                    type: officialLevel,
+                    expiry: officialExpiry,
+                    expired: isExpired(officialExpiry)
+                };
+            }
+
+
             contact.memberLevels.push({
                 name: memberLevel,
                 status
@@ -173,15 +181,15 @@ export function getTotals(contacts: ContactMap, reportingYear: number): ContactT
         }
 
         if (contact.firstAid) {
-            expiredInYear(contact.firstAid.expires, reportingYear) ? res.totalExpiredFirstAid ++ : res.totalFirstAid ++;
+            !contact.active || expiredInYear(contact.firstAid.expires, reportingYear) ? res.totalExpiredFirstAid ++ : res.totalFirstAid ++;
         }
 
         if (contact.coach) {
-            expiredInYear(contact.coach.expiry, reportingYear) ? res.totalExpiredCoaches ++ : res.totalCoaches ++;
+            !contact.active || expiredInYear(contact.coach.expiry, reportingYear) ? res.totalExpiredCoaches ++ : res.totalCoaches ++;
         }
 
         if (contact.official) {
-            expiredInYear(contact.official.expiry, reportingYear) ? res.totalOfficialsExpired ++ : res.totalOfficials ++;
+            !contact.active || expiredInYear(contact.official.expiry, reportingYear) ? res.totalOfficialsExpired ++ : res.totalOfficials ++;
         }
     }
 
@@ -207,6 +215,20 @@ export function getMemberLevelBreakdown(contacts: ContactMap): MemberLevelBreakd
     return res;
 }
 
+export function getSprocketGraduates(contacts: ContactMap, reportingYear: number): Array<Contact> {
+    const birthYear = reportingYear + 1 - 8;
+    const sprockets: Array<Contact> = [];
+    for (const [, contact] of contacts) {
+        if (contact.dateOfBirth && contact.active) {
+            const dobActual = new Date(contact.dateOfBirth);
+            if (dobActual.getFullYear() === birthYear) {
+                sprockets.push(contact);
+            }
+        }
+    }
+    return sprockets;
+}
+
 interface CurrentExpired<T> {
     current: Array<T>;
     expired: Array<T>;
@@ -215,6 +237,7 @@ interface CurrentExpired<T> {
 interface FirstAider {
     name: string;
     expiry: string;
+    licensed: string;
 }
 
 type Transformer<T> = (contact: Contact) => T;
@@ -231,7 +254,7 @@ function buildCurrentExpiredList<T>(
     for (const [, contact] of contacts) {
         if (contact[checkKey]) {
             const item = transformer(contact);
-            if (contact[checkKey]?.expired) {
+            if (!contact.active || contact[checkKey]?.expired) {
                 res.expired.push(item);
             } else {
                 res.current.push(item);
@@ -246,7 +269,8 @@ export const getClubFirstAiders = (contacts: ContactMap) => buildCurrentExpiredL
     'firstAid',
     contact => ({
         name: contact.name,
-        expiry: contact.firstAid?.expires ?? ''
+        expiry: contact.firstAid?.expires ?? '',
+        licensed: contact.active ? 'Yes' : 'No'
     })
 );
 
@@ -254,6 +278,7 @@ interface Coach {
     name: string;
     type: string;
     expiry: string;
+    licensed: string;
 }
 
 export const getClubCoaches = (contacts: ContactMap) => buildCurrentExpiredList<Coach>(
@@ -262,7 +287,8 @@ export const getClubCoaches = (contacts: ContactMap) => buildCurrentExpiredList<
     contact => ({
         name: contact.name,
         type: contact.coach?.type ?? '',
-        expiry: contact.coach?.expiry ?? ''
+        expiry: contact.coach?.expiry ?? '',
+        licensed: contact.active ? 'Yes' : 'No'
     })
 );
 
@@ -270,6 +296,7 @@ interface Official {
     name: string;
     type: string;
     expiry: string;
+    licensed: string;
 }
 
 export const getClubOfficials = (contacts: ContactMap) => buildCurrentExpiredList<Official>(
@@ -278,12 +305,13 @@ export const getClubOfficials = (contacts: ContactMap) => buildCurrentExpiredLis
     contact => ({
         name: contact.name,
         type: contact.official?.type ?? '',
-        expiry: contact.official?.expiry ?? ''
+        expiry: contact.official?.expiry ?? '',
+        licensed: contact.active ? 'Yes' : 'No'
     })
 );
 
 
-export function writeContactTotals(outputDir: string, totals: ContactTotals, reportingYear: number) {
+export function writeContactTotals(outputDir: string, totals: ContactTotals) {
     const outputFilename = path.join(outputDir, 'member-totals.csv');
     const output = stringify([
         ['Type', 'Total'],
@@ -293,11 +321,11 @@ export function writeContactTotals(outputDir: string, totals: ContactTotals, rep
         ['Active Volunteer Members', totals.totalVolunteers],
         ['Active Riding + Volunteer Members', totals.totalRidingVolunteers],
         ['First Aiders', totals.totalFirstAid],
-        [`First Aiders Expired (in ${reportingYear})`, totals.totalExpiredFirstAid],
+        [`First Aiders Expired`, totals.totalExpiredFirstAid],
         ['Coaches', totals.totalCoaches],
-        [`Coaches Expired (Accred. expired in ${reportingYear})`, totals.totalExpiredCoaches],
+        [`Coaches Expired`, totals.totalExpiredCoaches],
         ['Officials', totals.totalOfficials],
-        [`Officials Expired (in ${reportingYear})`, totals.totalOfficialsExpired],
+        [`Officials Expired`, totals.totalOfficialsExpired],
     ], { delimiter: ',' });
     fs.writeFileSync(outputFilename, output);
 }
@@ -309,6 +337,15 @@ export function writeMemberLevelBreakdown(outputDir: string, breakdown: MemberLe
         ...Object.keys(breakdown).map(name => [
             name, breakdown[name]
         ])
+    ], { delimiter: ',' });
+    fs.writeFileSync(outputFilename, output);
+}
+
+export function writeSprocketGraduates(outputPath: string, sprockets: Array<Contact>) {
+    const outputFilename = path.join(outputPath, 'grad-sprockets.csv');
+    const output = stringify([
+        ['Name', 'DoB'],
+        ...sprockets.map(c => [c.name, c.dateOfBirth])
     ], { delimiter: ',' });
     fs.writeFileSync(outputFilename, output);
 }

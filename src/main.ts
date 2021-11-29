@@ -5,11 +5,11 @@ import rimraf from 'rimraf';
 import {
     getClubCoaches,
     getClubFirstAiders, getClubOfficials,
-    getMemberLevelBreakdown,
+    getMemberLevelBreakdown, getSprocketGraduates,
     getTotals,
     parseCsv,
     writeContactTotals, writeCurrentExpired,
-    writeMemberLevelBreakdown
+    writeMemberLevelBreakdown, writeSprocketGraduates
 } from "./contacts";
 import {getClubEvents, writeEventBreakdown} from "./sqorz";
 
@@ -37,6 +37,13 @@ async function main() {
     console.log('Membership Level breakdown:');
     console.log(levelBreakdown);
 
+    console.log('------------------');
+
+    // Graduating sprockets:
+    const sprocketGrads = getSprocketGraduates(contacts, reportingYear);
+    console.log('Sprockets Graduating:', sprocketGrads.length);
+    console.log(sprocketGrads);
+
     // Grab some other useful stuff:
     const firstAiders = getClubFirstAiders(contacts);
     const coaches = getClubCoaches(contacts);
@@ -45,7 +52,7 @@ async function main() {
     console.log('------------------');
 
     console.log('Generating event information... This may take a moment...');
-    const events = [] as any; // await getClubEvents(sqorzOrg, reportingYear);
+    const events = await getClubEvents(sqorzOrg, reportingYear);
     console.log(events.length, 'club events found.');
 
     console.log('------------------');
@@ -61,7 +68,8 @@ async function main() {
     fs.mkdirSync(outputPath);
 
     console.log('Writing CSVs to the output dir: ', outputPath);
-    writeContactTotals(outputPath, totals, reportingYear);
+    writeContactTotals(outputPath, totals);
+    writeSprocketGraduates(outputPath, sprocketGrads);
     writeCurrentExpired(outputPath, firstAiders, 'first-aid');
     writeCurrentExpired(outputPath, coaches, 'coaches');
     writeCurrentExpired(outputPath, officials, 'officials');
