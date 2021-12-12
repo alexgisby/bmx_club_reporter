@@ -8,7 +8,8 @@
   "main": "index.js",
   "license": "MIT",
   "scripts": {
-    "generate": "ts-node ./src/main.ts"
+    "generate": "ts-node ./src/main.ts",
+    "series": "ts-node ./src/series-results.ts"
   },
   "dependencies": {
     "axios": "^0.24.0",
